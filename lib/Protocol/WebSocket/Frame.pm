@@ -54,6 +54,7 @@ sub new {
 
     $self->{max_fragments_amount} ||= 128;
     $self->{max_payload_size}     ||= 65536 unless exists $self->{max_payload_size};
+    $self->{max_message_size} ||= 204800;
 
     return $self;
 }
@@ -227,6 +228,10 @@ sub next_bytes {
 
             die "Too many fragments"
               if @{$self->{fragments}} > $self->{max_fragments_amount};
+
+	    # the number of fragments times the payload
+	    die "Message too big"
+              if ( @{$self->{fragments}} *  $self->{max_payload_size} ) > $self->{max_message_size};
         }
     }
 
@@ -254,11 +259,11 @@ sub to_bytes {
 
     my $rsv_set = 0;
     if($self->{rsv} && ref($self->{rsv}) eq 'ARRAY') {
-    	for my $i (0..@{$self->{rsv}}-1) { 
+    	for my $i (0..@{$self->{rsv}}-1) {
     		$rsv_set += $self->{rsv}->[$i] * (1 << (6 - $i));
     	}
     }
-    
+
     my $string = '';
     my $opcode = $self->opcode;
     $string .= pack 'C', ($opcode | $rsv_set | ($self->fin ? 128 : 0));
