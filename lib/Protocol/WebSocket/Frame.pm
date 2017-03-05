@@ -54,7 +54,7 @@ sub new {
 
     $self->{max_fragments_amount} ||= 128;
     $self->{max_payload_size}     ||= 65536 unless exists $self->{max_payload_size};
-    $self->{max_message_size} ||= 204800;
+    $self->{max_message_size} ||= 65536;
 
     return $self;
 }
@@ -126,6 +126,8 @@ sub next_bytes {
 
     return unless length $self->{buffer} >= 2;
 
+    my $message_size = 0;
+
     while (length $self->{buffer}) {
         my $hdr = substr($self->{buffer}, 0, 1);
 
@@ -175,10 +177,19 @@ sub next_bytes {
             $offset += 8;
         }
 
+	# accumulate all the payload lengths. this should get bigger on every loop (fragment)
+	$message_size = $message_size + $payload_len;
+	if ($self->{max_message_size} && $message_size > $self->{max_message_size}) {
+            $self->{buffer} = '';
+            die "Message is too big. "
+              . "Deny big message ($message_size) "
+              . "or increase max_message_size ($self->{max_message_size})";
+        }
+
         if ($self->{max_payload_size} && $payload_len > $self->{max_payload_size}) {
             $self->{buffer} = '';
             die "Payload is too big. "
-              . "Deny big message ($payload_len) "
+              . "Deny big message payload($payload_len) "
               . "or increase max_payload_size ($self->{max_payload_size})";
         }
 
@@ -229,9 +240,10 @@ sub next_bytes {
             die "Too many fragments"
               if @{$self->{fragments}} > $self->{max_fragments_amount};
 
-	    # the number of fragments times the payload
-	    die "Message too big"
-              if ( @{$self->{fragments}} *  $self->{max_payload_size} ) > $self->{max_message_size};
+	    # the number of fragments times the payload ( this assumes all payload sizes are the same which is likely not true )
+	    # this is not really needed as we are checking the actual size of the message above with $message_size
+	    die "Message too big, fragments times max_payload_size overrun"
+              if ( @{$self->{fragments}} * $self->{max_payload_size} ) > $self->{max_message_size};
         }
     }
 
