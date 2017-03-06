@@ -55,6 +55,7 @@ sub new {
     $self->{max_fragments_amount} ||= 128;
     $self->{max_payload_size}     ||= 65536 unless exists $self->{max_payload_size};
     $self->{max_message_size} ||= 65536 unless exists $self->{max_message_size};
+    $self->{message_size} ||= 0; # to keep the message size accumlator var private to this connection
 
     return $self;
 }
@@ -108,6 +109,8 @@ sub is_continuation { $_[0]->opcode == 0 }
 sub is_text         { $_[0]->opcode == 1 }
 sub is_binary       { $_[0]->opcode == 2 }
 
+#my $message_size = 0;
+
 sub next_bytes {
     my $self = shift;
 
@@ -125,8 +128,6 @@ sub next_bytes {
     }
 
     return unless length $self->{buffer} >= 2;
-
-    my $message_size = 0;
 
     while (length $self->{buffer}) {
         my $hdr = substr($self->{buffer}, 0, 1);
@@ -184,15 +185,6 @@ sub next_bytes {
               . "or increase max_payload_size ($self->{max_payload_size})";
         }
 
-	# accumulate all the payload lengths. this should get bigger on every loop (fragment)
-	$message_size = $message_size + $payload_len;
-	if ($self->{max_message_size} && $message_size > $self->{max_message_size}) {
-            $self->{buffer} = '';
-            die "Message is too big. "
-              . "Deny big message ($message_size) "
-              . "or increase max_message_size ($self->{max_message_size})";
-        }
-
         my $mask;
         if ($self->masked) {
             return unless length($self->{buffer}) >= $offset + 4;
@@ -217,7 +209,16 @@ sub next_bytes {
             return $payload;
         }
 
-        if ($self->fin) {
+	if ($self->fin) {
+	    $self->{message_size} = $self->{message_size} + $payload_len; # accumulate the fragment sizes into the message size as we go
+	    if ($self->{max_message_size} && $self->{message_size} > $self->{max_message_size}) {
+		$self->{buffer} = '';
+		die "Message is too big. "
+		  . "Deny big message ($self->{message_size}) "
+		  . "or increase max_message_size ($self->{max_message_size})";
+	    }
+
+	    $self->{message_size} = 0;# this is the last fragment (or a single unfragmented message frame) so we reset the message size accumulator
             if (@{$self->{fragments}}) {
                 $self->opcode(shift @{$self->{fragments}});
             }
@@ -229,7 +230,6 @@ sub next_bytes {
             return $payload;
         }
         else {
-
             # Remember first fragment opcode
             if (!@{$self->{fragments}}) {
                 push @{$self->{fragments}}, $opcode;
@@ -240,11 +240,15 @@ sub next_bytes {
             die "Too many fragments"
               if @{$self->{fragments}} > $self->{max_fragments_amount};
 
-	    # the number of fragments times the payload ( this assumes all payload sizes are the same which is likely not true )
-	    # this is not really needed as we are checking the actual size of the message above with $message_size
-	    #die "Message too big, fragments times max_payload_size overrun"
-              #if ( @{$self->{fragments}} * $self->{max_payload_size} ) > $self->{max_message_size};
+	    $self->{message_size} = $self->{message_size} + $payload_len; # accumulate the fragment sizes into the message size as we go
+	    if ($self->{max_message_size} && $self->{message_size} > $self->{max_message_size}) {
+		$self->{buffer} = '';
+		die "Message is too big. "
+		  . "Deny big message ($self->{message_size}) "
+		  . "or increase max_message_size ($self->{max_message_size})";
+	    }
         }
+
     }
 
     return;
