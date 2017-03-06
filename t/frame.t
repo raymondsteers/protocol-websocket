@@ -52,16 +52,16 @@ my $large_frame =
   Protocol::WebSocket::Frame->new(buffer => 'x' x 65537, max_payload_size => 0);
 
 subtest 'payload too large (next_bytes)' => sub {
-    my $frame = Protocol::WebSocket::Frame->new;
+    my $frame = Protocol::WebSocket::Frame->new(max_message_size => 0);# need to turn off max_message_size to check
     $frame->append($large_frame->to_bytes);
 
     eval { $frame->next_bytes };
 
-    like $@, qr/Payload is too big\. Deny big message/;
+    like $@, qr/Payload is too big\. Deny big payload/;
 };
 
 subtest 'payload larger than 65536, but under max (next_bytes)' => sub {
-    my $frame = Protocol::WebSocket::Frame->new(max_payload_size => 65537);
+    my $frame = Protocol::WebSocket::Frame->new(max_payload_size => 65537, max_message_size => 0);# need to turn off max_message_size to check
     $frame->append($large_frame->to_bytes);
 
     eval { $frame->next_bytes };
@@ -70,12 +70,21 @@ subtest 'payload larger than 65536, but under max (next_bytes)' => sub {
 };
 
 subtest 'turn off payload size checking (next_bytes)' => sub {
-    my $frame = Protocol::WebSocket::Frame->new(max_payload_size => 0);
+    my $frame = Protocol::WebSocket::Frame->new(max_payload_size => 0, max_message_size => 0);# need to turn off max_message_size to check
     $frame->append($large_frame->to_bytes);
 
     eval { $frame->next_bytes };
 
     is $@, '';
+};
+
+subtest 'message too large (next_bytes)' => sub {
+    my $frame = Protocol::WebSocket::Frame->new(max_payload_size => 65537);
+    $frame->append($large_frame->to_bytes);
+
+    eval { $frame->next_bytes };
+
+    like $@, qr/Message is too big\. Deny big message/;
 };
 
 done_testing;
