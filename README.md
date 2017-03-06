@@ -1,3 +1,9 @@
+# MODIFICATION NOTES
+
+Adding the ability to track overall incoming message sizes as the accumulate during frame fragmentation,
+then die if over a settable threshold. This works independant of number of frames and payload size.
+Please see Frame.pm 
+
 # NAME
 
 Protocol::WebSocket - WebSocket protocol
