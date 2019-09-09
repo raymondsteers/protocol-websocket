@@ -4,6 +4,8 @@ Adding the ability to track overall incoming message sizes as the accumulate dur
 then die if over a settable threshold. This works independant of number of frames and payload size.
 Please see Frame.pm 
 
+By trail and error it seems that Chrome will fragment at 128kb but safari does not. So if for example you set the max_mess_size to 256kb on the server but the max_recv_size to 128kb, you would be able to upload a 200kb file from Chrome but not from Safari.
+
 # NAME
 
 Protocol::WebSocket - WebSocket protocol
